@@ -74,29 +74,8 @@ def get_id(url) :
         #print(el) 
         return el 
 
-def download_necessary() : 
-    gdown.download(id = get_id('https://docs.google.com/spreadsheets/d/1qM0qLhVwiEGoIoducdN1enKTjmdAS-xh/edit?usp=sharing&ouid=112233642586268936798&rtpof=true&sd=true'))
-    global downloaded 
-    downloaded = True 
 
-def download_file() :    
-      downloaded_file = pd.read_excel('Link.xlsx') 
-      links = st.multiselect('please select the file you wish to download : ', downloaded_file['Filter'].unique())
-      #st.write(links) 
-      download_button = st.button('Download')
-      if (len(links)!=0 & download_button) : 
-        for items in links : 
-            list_of_file = downloaded_file[downloaded_file['Filter']==items]['Link'].unique() 
-            if len(list_of_file)>1 : 
-                for file in list_of_file : 
-                    st.write('downloading file ...')
-                    gdown.download(id = get_id(file)) 
-                    st.write('downloaded!')
-                    
-            else :  
-                st.write('downloading file ...')
-                gdown.download(id = get_id(list_of_file[0]))        
-                st.write('downloaded!')     
+    
 
 ################################################algo#######################################################
 
