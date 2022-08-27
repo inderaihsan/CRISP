@@ -87,11 +87,9 @@ fileupload()
 
 eda(dataframe) 
 
-st.header('Spatial Database Download') 
 
 
 
-# Using object notation
 
 
 
