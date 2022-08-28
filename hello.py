@@ -1,6 +1,5 @@
 from distutils.command.upload import upload
 from multiprocessing import dummy
-from turtle import onclick 
 import streamlit.components.v1 as components
 import streamlit as st 
 import pandas as pd
