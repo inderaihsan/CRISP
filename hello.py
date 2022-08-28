@@ -121,8 +121,8 @@ def fill_missing(dataframe) :
         temp = operator[sel_method] 
         gather = dict(zip(temp[sel_group], temp[sel_col]))
         st.write(gather)
+        index = 0
         if(st.button('fill null values')) :  
-            index = 0
             for x,y in zip(st.session_state.dataset[sel_group], st.session_state.dataset[sel_col]) : 
                 if (pd.isnull(y)) : 
                     st.session_state.dataset[sel_col][index] = gather[x] 
