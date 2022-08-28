@@ -1,3 +1,4 @@
+dataprep==0.4.5
 gdown==4.5.1
 matplotlib==3.5.3
 numpy==1.23.2
