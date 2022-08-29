@@ -1,3 +1,4 @@
+from distutils import errors
 from distutils.command.upload import upload
 from multiprocessing import dummy
 import streamlit.components.v1 as components
@@ -23,12 +24,13 @@ uploaded = False
 sns.set_style("whitegrid")
 uploaded = False 
 dataframe = pd.DataFrame() 
-def fileupload() : 
+st.session_state.selected = False
+def fileupload() :  
     uploaded_file = st.file_uploader("Choose a file") 
     if uploaded_file is not None:
         # Can be used wherever a "file-like" object is accepted:
         global dataframe
-        dataframe = pd.read_csv(uploaded_file)
+        dataframe = pd.read_excel(uploaded_file)
         st.write(dataframe)  
         global uploaded 
         uploaded = True 
@@ -72,6 +74,13 @@ def convert(uploaded) :
             ax = sns.violinplot(x = dataframe[X], y = dataframe[y], data = dataframe, hue= hue)
             st.pyplot(fig)
 
+def pick_columns(df) : 
+    selected_columns = st.multiselect('please select the column you want to analyze from your data : ',np.sort(df.columns), key='select_column')
+    df = df[selected_columns]  
+    if (st.button('confirm')) :   
+        global selected  
+        selected = True
+        st.session_state.dataset = df 
 
 def eda (dataframe) : 
     global uploaded
@@ -98,39 +107,61 @@ def showmissing(dataframe) :
     else : 
         st.write("you haven't uploaded a file, please upload a CSV file or use seaborn dummy data") 
 
-def fill_missing(dataframe) :  
-    sel_col = st.radio('please select a column to be filled', dataframe.columns) 
+def fill_missing(data) :   
+    st.write(data)
+    sel_col = st.radio('please select a column to be filled', data.columns) 
     st.write(sel_col) 
 
     #categorical missing value
-    if(type(st.session_state['dataset'][sel_col][0])==str) : 
-        sel_val = st.radio('select a value to replace the null : ', st.session_state['dataset'][st.session_state['dataset'][sel_col].notnull()][sel_col].unique()) 
+    if(type(data[sel_col][0])==str) : 
+        sel_val = st.radio('select a value to replace the null : ', data[data[sel_col].notna()][sel_col].unique()) 
         if(st.button('fill null values')) : 
-            st.session_state['dataset'][sel_col] = st.session_state['dataset'][sel_col].apply(lambda x:sel_val if pd.isnull(x) else x) 
+            data[sel_col] = data[sel_col].apply(lambda x:sel_val if pd.isnull(x) else x) 
             #showmissing(st.session_state['dataset'])  
-            st.session_state['dataset'] = st.session_state['dataset']  
+            st.session_state['dataset'] = data  
 
     #numerical missing value
-    if(type(st.session_state['dataset'][sel_col][0])!=str) : 
+    if(type(data[sel_col][0])!=str) : 
         sel_method = st.radio('numerical method : ', ['Mean', 'Minimum', 'Maximum'], horizontal = True)  
-        sel_group = st.radio('select a group column' , st.session_state.dataset.select_dtypes(exclude='number').columns, horizontal=True) 
-        operator = {'Mean' : st.session_state.dataset.groupby(by=[sel_group]).mean().reset_index() , 
-                    'Minimum' : st.session_state.dataset.groupby(by=[sel_group]).min().reset_index(), 
-                    'Maximum' : st.session_state.dataset.groupby(by=[sel_group]).max().reset_index(), 
-                   } 
-        temp = operator[sel_method] 
-        gather = dict(zip(temp[sel_group], temp[sel_col]))
-        st.write(gather)
-        index = 0
-        if(st.button('fill null values')) :  
-            for x,y in zip(st.session_state.dataset[sel_group], st.session_state.dataset[sel_col]) : 
-                if (pd.isnull(y)) : 
-                    st.session_state.dataset[sel_col][index] = gather[x] 
-                    print('miss miss miss') 
-                    index=index+1 
-                index=index+1
-            st.session_state.dataset = st.session_state.dataset 
-            
+        sel_group = st.radio('select a group column' , data.select_dtypes(exclude='number').columns, horizontal=True)  
+        if(len(sel_group)>0) : 
+            operator = {'Mean' : data.groupby(by=[sel_group]).mean().reset_index() , 
+                        'Minimum' : data.groupby(by=[sel_group]).min().reset_index(), 
+                        'Maximum' : data.groupby(by=[sel_group]).max().reset_index(), 
+                    }   
+            temp = operator[sel_method] 
+            gather = dict(zip(temp[sel_group], temp[sel_col]))
+            st.write(gather)
+            index = 0 
+            if(st.button('fill null values')) :  
+                for x,y in zip(data[sel_group], data[sel_col]) : 
+                    if (pd.isnull(y)) : 
+                        value_to_replace = operator[sel_method] 
+                        #st.write(value_to_replace)
+                        #value_to_replace = value_to_replace[[value_to_replace][sel_group]==x]
+                        value_to_replace = value_to_replace[value_to_replace[sel_group]==x][sel_col].values[0]
+                        df[sel_col][index] = value_to_replace  
+                    index = index+1
+
+    
+        elif(len(sel_group)==0) :  
+             operator = {'Mean' : np.mean(df[sel_col]) , 
+                        'Minimum' : np.min(df[sel_col]), 
+                        'Maximum' : np.min(df[sel_col]), 
+                        } 
+             df[sel_col] = df[sel_col].apply(lambda x: operator[sel_method] if pd.isnull(x) else x)   
+
+        st.session_state.dataset = data #save value as a state
+
+   
+            #showmissing(df) 
+
+def removeduplicate(df) :   
+    st.write('below are the duplicated value of your data, you can simply remove the duplicate from your data by clicking the button below the table')
+    st.table(df[df.duplicated()]) 
+    if(st.button('Remove Duplicate')) : 
+        df.drop_duplicates(inplace = True, keep='first') 
+    st.session_state.dataset = df
             
     
 ################################################algo#######################################################
@@ -146,24 +177,45 @@ fileupload()
 
 st.write('you can also use a dummy data from seaborn [penguins](https://github.com/mwaskom/seaborn-data/blob/master/penguins.csv) dataset ')
 
-dummyyy = st.checkbox('i want to use seaborn dataset') 
+dummyyy = st.checkbox('i want to use seaborn dataset')  
+selected = False
 
 if(dummyyy) : 
     use_dummy_data() 
-    df = st.session_state['dataset']
-eda(dataframe)    
-
-st.header('Missing value') 
-
+    df = st.session_state['dataset'] 
+  
 if(uploaded) :  
-    tab_1, tab_2 = st.tabs(["Missing value", "Fill Missing Value"]) 
-    with tab_1 : 
-        df = st.session_state['dataset']
-        showmissing(df) 
-    with tab_2 : 
-        st.session_state['dataset']
-        fill_missing(df) 
-        showmissing(df)
+    df = st.session_state['dataset']  
+    st.header('Select a column for further analysis')
+    pick_columns(df)  
+
+
+
+if(uploaded) :   
+    try : 
+        st.header('Missing value') 
+        tab_1, tab_2 = st.tabs(["Missing value", "Fill Missing Value"]) 
+        with tab_1 : 
+            df = st.session_state['dataset']
+            showmissing(df) 
+        with tab_2 : 
+            df = st.session_state['dataset']
+            fill_missing(df) 
+
+    except ValueError:
+        st.error('Please select a data first')
+##removeduplicate 
+
+if(uploaded) :    
+    try : 
+        st.header('Duplicate Value') 
+        df = st.session_state.dataset  
+        removeduplicate(df)  
+    except ValueError : 
+        st.write("you haven't upload a file, please select a file")
+#exploratory data analysis
+if 'dataset' in st.session_state : 
+    eda(st.session_state.dataset)  
 
 
 
