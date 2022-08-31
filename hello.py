@@ -1,5 +1,7 @@
+from ctypes.wintypes import POINT
 from distutils import errors
 from distutils.command.upload import upload
+from functools import cache
 from multiprocessing import dummy
 import streamlit.components.v1 as components
 import streamlit as st 
@@ -14,6 +16,9 @@ from streamlit_pandas_profiling import st_profile_report
 import gdown 
 from dataprep.eda.missing import plot_missing 
 from dataprep.eda import create_report
+from streamlit_folium import folium_static
+import folium
+
 
 
 
@@ -21,6 +26,7 @@ from dataprep.eda import create_report
 
 downloaded = False 
 uploaded = False
+selected = False
 sns.set_style("whitegrid")
 uploaded = False 
 dataframe = pd.DataFrame() 
@@ -34,8 +40,6 @@ def fileupload() :
         st.write(dataframe)  
         global uploaded 
         uploaded = True 
-        if 'dataset' not in st.session_state:
-                st.session_state['dataset'] = dataframe  
         return dataframe
 
 def use_dummy_data() : 
@@ -43,9 +47,7 @@ def use_dummy_data() :
     global dataframe
     data = sns.load_dataset('penguins')  
     dataframe = data 
-    uploaded = True 
-    if 'dataset' not in st.session_state:
-            st.session_state['dataset'] = dataframe  
+    uploaded = True  
     st.write(dataframe) 
     return dataframe
     
@@ -77,21 +79,16 @@ def convert(uploaded) :
 def pick_columns(df) : 
     selected_columns = st.multiselect('please select the column you want to analyze from your data : ',np.sort(df.columns), key='select_column')
     df = df[selected_columns]  
-    if (st.button('confirm')) :   
-        global selected  
-        selected = True
+    if (st.button('confirm')) :    
+        boole = True
         st.session_state.dataset = df 
 
-def eda (dataframe) : 
+@st.experimental_memo(suppress_st_warning=True)
+def eda (df) : 
     global uploaded
-    if (uploaded) :   
-        st.subheader('You can find a brief overview of your data below by looking at the profile page of your data.') 
-        options = st.multiselect('please select the column you want to analyze from your data : ',np.sort(dataframe.columns))
-        #st.write('selected columns : ', (x for x in options)) 
-        but = st.button('Analyze')  
-        if (but and len(options)!=0): 
-            pr = dataframe[options].profile_report()
-            st_profile_report(pr) 
+    st.subheader('You can find a brief overview of your data below by looking at the profile page of your data.')     
+    pr = df.profile_report()
+    st_profile_report(pr) 
 
  
 def showmissing(dataframe) :   
@@ -124,7 +121,7 @@ def fill_missing(data) :
     if(type(data[sel_col][0])!=str) : 
         sel_method = st.radio('numerical method : ', ['Mean', 'Minimum', 'Maximum'], horizontal = True)  
         sel_group = st.radio('select a group column' , data.select_dtypes(exclude='number').columns, horizontal=True)  
-        if(len(sel_group)>0) : 
+        if(pd.notnull(sel_group)) : 
             operator = {'Mean' : data.groupby(by=[sel_group]).mean().reset_index() , 
                         'Minimum' : data.groupby(by=[sel_group]).min().reset_index(), 
                         'Maximum' : data.groupby(by=[sel_group]).max().reset_index(), 
@@ -144,14 +141,16 @@ def fill_missing(data) :
                     index = index+1
 
     
-        elif(len(sel_group)==0) :  
-             operator = {'Mean' : np.mean(df[sel_col]) , 
-                        'Minimum' : np.min(df[sel_col]), 
-                        'Maximum' : np.min(df[sel_col]), 
-                        } 
-             df[sel_col] = df[sel_col].apply(lambda x: operator[sel_method] if pd.isnull(x) else x)   
+        elif(pd.isnull(sel_group)) :   
+            if(st.button('fill null values')) : 
+                operator = {'Mean' : np.mean(df[sel_col]) , 
+                            'Minimum' : np.min(df[sel_col]), 
+                            'Maximum' : np.min(df[sel_col]), 
+                            } 
+                df[sel_col] = df[sel_col].apply(lambda x: operator[sel_method] if pd.isnull(x) else x)    
+        
 
-        st.session_state.dataset = data #save value as a state
+        st.session_state.dataset = data #save value as a state 
 
    
             #showmissing(df) 
@@ -163,6 +162,30 @@ def removeduplicate(df) :
         df.drop_duplicates(inplace = True, keep='first') 
     st.session_state.dataset = df
             
+
+def spatial_transform(data) : 
+    import geopandas as gpd 
+    from shapely import geometry
+    st.header('Spatial Transformation') 
+    st.subheader('is there any longitude or latitude in your data?')
+    longitude = st.radio('Longitude',data.columns) 
+    latitude = st.radio('Latitude',data.columns) 
+    if(st.button('convert')) :
+        geom = [] 
+        try : 
+            for x,y in zip(data[longitude], data[latitude]) : 
+                geom.append(geometry.Point(x,y)) 
+            geodataframe = gpd.GeoDataFrame(data, geometry=geom)  
+            st.session_state['Geodataset'] = geodataframe 
+            world =  gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")) 
+            m = world.explore(name = 'polygon of world map')  
+            geodataframe.explore(m = m)
+            folium.TileLayer('Stamen Terrain', control=True).add_to(m)  # use folium to add alternative tiles
+            folium.LayerControl().add_to(m)  # use folium to add layer 
+            st.markdown(folium_static(m), unsafe_allow_html=True)
+        except:
+             st.write('hmm... something is wrong, is the columns ')
+    
     
 ################################################algo#######################################################
 
@@ -177,21 +200,24 @@ fileupload()
 
 st.write('you can also use a dummy data from seaborn [penguins](https://github.com/mwaskom/seaborn-data/blob/master/penguins.csv) dataset ')
 
+
 dummyyy = st.checkbox('i want to use seaborn dataset')  
-selected = False
+
+
+
 
 if(dummyyy) : 
     use_dummy_data() 
-    df = st.session_state['dataset'] 
+
   
 if(uploaded) :  
-    df = st.session_state['dataset']  
+    df = dataframe  
     st.header('Select a column for further analysis')
     pick_columns(df)  
 
 
 
-if(uploaded) :   
+if('dataset' in st.session_state) :   
     try : 
         st.header('Missing value') 
         tab_1, tab_2 = st.tabs(["Missing value", "Fill Missing Value"]) 
@@ -204,18 +230,26 @@ if(uploaded) :
 
     except ValueError:
         st.error('Please select a data first')
-##removeduplicate 
 
-if(uploaded) :    
-    try : 
-        st.header('Duplicate Value') 
-        df = st.session_state.dataset  
-        removeduplicate(df)  
-    except ValueError : 
-        st.write("you haven't upload a file, please select a file")
+
+
+##removeduplicate 
+if('dataset' in st.session_state) :    
+    st.header('Duplicate Value') 
+    df = st.session_state.dataset  
+    removeduplicate(df)  
+
+
 #exploratory data analysis
-if 'dataset' in st.session_state : 
+if st.button('Analyze my Data') : 
     eda(st.session_state.dataset)  
+
+if ('dataset' in st.session_state) : 
+    dataframe = st.session_state.dataset.copy()
+    spatial_transform(dataframe) 
+
+
+
 
 
 
