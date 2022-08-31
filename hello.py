@@ -172,19 +172,17 @@ def spatial_transform(data) :
     latitude = st.radio('Latitude',data.columns) 
     if(st.button('convert')) :
         geom = [] 
-        try : 
-            for x,y in zip(data[longitude], data[latitude]) : 
-                geom.append(geometry.Point(x,y)) 
-            geodataframe = gpd.GeoDataFrame(data, geometry=geom)  
-            st.session_state['Geodataset'] = geodataframe 
-            world =  gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")) 
-            m = world.explore(name = 'polygon of world map')  
-            geodataframe.explore(m = m)
-            folium.TileLayer('Stamen Terrain', control=True).add_to(m)  # use folium to add alternative tiles
-            folium.LayerControl().add_to(m)  # use folium to add layer 
-            st.markdown(folium_static(m), unsafe_allow_html=True)
-        except:
-             st.write('hmm... something is wrong, is the columns ')
+        for x,y in zip(data[longitude], data[latitude]) : 
+            geom.append(geometry.Point(x,y)) 
+        geodataframe = gpd.GeoDataFrame(data, geometry=geom)  
+        st.session_state['Geodataset'] = geodataframe 
+        world =  gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")) 
+        m = world.explore(name = 'polygon of world map')  
+        geodataframe.explore(m = m)
+        folium.TileLayer('Stamen Terrain', control=True).add_to(m)  # use folium to add alternative tiles
+        folium.LayerControl().add_to(m)  # use folium to add layer 
+        st.markdown(folium_static(m), unsafe_allow_html=True)
+ 
     
     
 ################################################algo#######################################################
