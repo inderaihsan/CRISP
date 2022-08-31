@@ -3,7 +3,7 @@ folium==0.12.1.post1
 gdown==4.5.1
 geopandas==0.11.1
 matplotlib==3.5.3
-numpy==1.22.4+vanilla
+numpy==1.22.4
 pandas==1.4.3
 pandas_profiling==3.2.0
 plotly==5.10.0
