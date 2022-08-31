@@ -180,7 +180,8 @@ def spatial_transform(data) :
         m = world.explore(name = 'polygon of world map')  
         geodataframe.explore(m = m)
         folium.TileLayer('Stamen Terrain', control=True).add_to(m)  # use folium to add alternative tiles
-        folium.LayerControl().add_to(m)  # use folium to add layer 
+        folium.LayerControl().add_to(m)  # use folium to add layer  
+        st.write('VOILA')
         st.markdown(folium_static(m), unsafe_allow_html=True)
  
     
@@ -244,7 +245,8 @@ if st.button('Analyze my Data') :
 
 if ('dataset' in st.session_state) : 
     dataframe = st.session_state.dataset.copy()
-    spatial_transform(dataframe) 
+    spatial_transform(dataframe)    
+    
 
 
 
