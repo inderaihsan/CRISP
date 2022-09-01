@@ -17,7 +17,7 @@ import gdown
 from dataprep.eda.missing import plot_missing 
 from dataprep.eda import create_report
 from streamlit_folium import folium_static
-import folium
+import folium 
 
 
 
@@ -36,12 +36,12 @@ def fileupload() :
     if uploaded_file is not None:
         # Can be used wherever a "file-like" object is accepted:
         global dataframe
-        dataframe = pd.read_csv(uploaded_file)
+        dataframe = pd.read_csv(uploaded_file, on_bad_lines='skip')
         st.write(dataframe)  
         global uploaded 
         uploaded = True 
         return dataframe
-
+@st.experimental_singleton
 def use_dummy_data() : 
     global uploaded 
     global dataframe
@@ -52,7 +52,7 @@ def use_dummy_data() :
     return dataframe
     
 
-
+@st.experimental_singleton
 def convert(uploaded) :
     if (uploaded) : 
         global dataframe
@@ -77,20 +77,22 @@ def convert(uploaded) :
             st.pyplot(fig)
 
 def pick_columns(df) : 
-    selected_columns = st.multiselect('please select the column you want to analyze from your data : ',np.sort(df.columns), key='select_column')
-    df = df[selected_columns]  
-    if (st.button('confirm')) :    
+    selected_columns = st.multiselect('please select the column you want to analyze from your data : ',np.sort(df.columns), key='select column')
+    @st.experimental_singleton
+    def return_val(df , val) :     
         boole = True
-        st.session_state.dataset = df 
+        st.session_state.dataset = df[val]  
+    if (st.button('confirm')) : 
+        return_val(df, selected_columns)
 
-@st.experimental_memo(suppress_st_warning=True)
+@st.experimental_singleton(suppress_st_warning=True)
 def eda (df) : 
     global uploaded
     st.subheader('You can find a brief overview of your data below by looking at the profile page of your data.')     
     pr = df.profile_report()
     st_profile_report(pr) 
 
- 
+@st.experimental_singleton
 def showmissing(dataframe) :   
     if(uploaded) : 
         missing_val = []
@@ -104,6 +106,7 @@ def showmissing(dataframe) :
     else : 
         st.write("you haven't uploaded a file, please upload a CSV file or use seaborn dummy data") 
 
+@st.experimental_singleton(suppress_st_warning=True)
 def fill_missing(data) :   
     st.write(data)
     sel_col = st.radio('please select a column to be filled', data.columns) 
@@ -161,8 +164,7 @@ def removeduplicate(df) :
     if(st.button('Remove Duplicate')) : 
         df.drop_duplicates(inplace = True, keep='first') 
     st.session_state.dataset = df
-            
-
+          
 def spatial_transform(data) : 
     import geopandas as gpd 
     from shapely import geometry
@@ -178,13 +180,131 @@ def spatial_transform(data) :
         st.session_state['Geodataset'] = geodataframe 
         world =  gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")) 
         m = world.explore(name = 'polygon of world map')  
-        geodataframe.explore(m = m)
+        geodataframe.explore(m = m, name = 'map from your data')
         folium.TileLayer('Stamen Terrain', control=True).add_to(m)  # use folium to add alternative tiles
         folium.LayerControl().add_to(m)  # use folium to add layer  
-        st.write('VOILA')
+        st.subheader('Voila , your data has been successfully converted into Geodataframe file.') 
+        st.write('for further information about Geodataframe, you can read the document provided by geopandas by clicking [here](https://geopandas.org/en/stable/docs/reference/geodataframe.html)')
+        st.write('and voala, this is a map generated based on the longitude and latitude in your data.')
         st.markdown(folium_static(m), unsafe_allow_html=True)
  
+
+def check_outlier(data) : 
+    st.header('Checking outlier') 
+    st.subheader('wait, what is an outlier?') 
+    st.write('outlier is a value stored in your data that differs significantly from other observations') 
+    st.write('if you want to have a better explanation about outlier, checkout the cool explanation [here](https://medium.com/analytics-vidhya/its-all-about-outliers-cbe172aa1309)') 
+    st.write("let's visualize the outlier in your data, please select the numerical value from your data")  
+    outlier_variab = st.selectbox('select the numerical value from your data',data.select_dtypes(include='number').columns) 
+    method = st.selectbox('please choose the method for detecting outlier',['iqr' , 'std'])   
+    plotkind = st.selectbox('what kind of plot you want to use for detecting outlier',['hist' , 'boxplot']) 
+    fetched_data = data[outlier_variab]
+    min_slider = (int(fetched_data.min().round())) 
+    max_slider = (int(fetched_data.max().round()))  
+
+    filter_value = st.slider('you can also make a filter in your data : ',min_slider,max_slider) 
+    operand = st.selectbox('filter : ', ['>', '<', 'no filter'])
     
+    #function inside function 
+    
+    
+    def visualize_data(data,x,method, plot, filter_value = 0, operand = 'no filter') :   
+        data = data.dropna(subset =[x]) 
+        st.set_option('deprecation.showPyplotGlobalUse', False)
+        if data.empty : 
+            return 'No Values generated, please select another values or operations for filtering'
+        if (filter_value!=0) & (operand!= 'no filter') : 
+            if operand=='<' : 
+                data = data[data[x] < filter_value] 
+            elif operand =='>' :  
+                data = data[data[x] > filter_value] 
+        #if x not in df.columns : 
+        #  return 'columns are not in dataframe'
+        mean = np.mean(data[x]) 
+        median = np.median(data[x]) 
+        min = np.min(data[x]) 
+        max = np.max(data[x])   
+        std = np.std(data[x]) 
+        Q1 = np.quantile(data[x], 0.25) 
+        Q3 = np.quantile(data[x],0.75) 
+        IQR = Q3-Q1 
+        lowerbound = Q1-(1.5*IQR) 
+        upperbound = Q3+(1.5*IQR)
+        plt.figure(figsize=(15,11))   
+        if plot == 'hist' :  
+            fig, ax = plt.subplots() 
+            ax = sns.histplot(data=data, x=x, kde=True)    
+            #g.set(ylim=(0, data[x].max())) 
+            ax.set(xlim=(0, data[x].max()))
+            if (method=='iqr') :
+                plt.axvline(x = np.mean(data[x]), color= 'r', ls=':', label='mean = '+str(np.mean(data[x])), lw=3)     
+                plt.axvline(x = np.median(data[x]), color= 'y', ls='--', label='median = '+str(np.median(data[x])), lw=1.8)  
+                plt.axvline(x = Q1, color= 'g', ls='--', label='Q1 = '+str(Q1), lw=1.8) 
+                plt.axvline(x = Q3, color= 'b', ls='--', label='Q3 = '+str(Q3), lw=1.8) 
+                plt.axvline(x = lowerbound, color= 'g', ls='--', label='lowerbound = '+str(lowerbound), lw=1.8) 
+                plt.axvline(x = upperbound, color= 'b', ls='--', label='upperbound = '+str(upperbound), lw=1.8)   
+            else : 
+                plt.axvline(x = mean , color= 'r', ls='--', label='mean = '+str(mean), lw=3)  
+                plt.axvline(x = mean + std, color= 'g', ls='--', label='1 std = '+str(std), lw=1.8) 
+                plt.axvline(x = mean + (2*std), color= 'y', ls='--', label='2 std = '+str(mean + (2*std)), lw=1.8) 
+                plt.axvline(x = mean + (3*std), color= 'b', ls='--', label='3 std = '+str(mean + (3*std)), lw=1.8)   
+                plt.axvline(x = mean - std, color= 'g', ls='--', label='-1 std = '+str(std), lw=1.8) 
+                plt.axvline(x = mean - (2*std), color= 'y', ls='--', label='-2 std = '+str(mean + (2*std)), lw=1.8) 
+                plt.axvline(x = mean - (3*std), color= 'b', ls='--', label='-3 std = '+str(mean + (3*std)), lw=1.8)  
+
+            #plt.axvline(x = statistics.mode(data[columns]), color= 'g', ls='--', label='mode = '+str(statistics.mode(data[columns])), lw=2.5)      
+            plt.legend(loc='upper right')  
+            plt.title(label = 'Outlier and Boundaries of ' + x + ' with ' + str(method)) 
+            plt.show() 
+        else :  
+            fig, ax = plt.subplots() 
+            ax = sns.boxplot(data=data, x=x)    
+            ax.set(xlim=(0, data[x].max()))  
+            if (method=='iqr') :
+                plt.axvline(x = np.mean(data[x]), color= 'r', ls=':', label='mean = '+str(np.mean(data[x])), lw=3)     
+                plt.axvline(x = np.median(data[x]), color= 'y', ls='--', label='median = '+str(np.median(data[x])), lw=1.8)  
+                plt.axvline(x = Q1, color= 'g', ls='--', label='Q1 = '+str(Q1), lw=1.8) 
+                plt.axvline(x = Q3, color= 'b', ls='--', label='Q3 = '+str(Q3), lw=1.8) 
+                plt.axvline(x = lowerbound, color= 'g', ls='--', label='lowerbound = '+str(lowerbound), lw=1.8) 
+                plt.axvline(x = upperbound, color= 'b', ls='--', label='upperbound = '+str(upperbound), lw=1.8)   
+            else : 
+                plt.axvline(x = mean , color= 'r', ls='--', label='mean = '+str(mean), lw=3)  
+                plt.axvline(x = mean + std, color= 'g', ls='--', label='1 std = '+str(std), lw=1.8) 
+                plt.axvline(x = mean + (2*std), color= 'y', ls='--', label='2 std = '+str(mean + (2*std)), lw=1.8) 
+                plt.axvline(x = mean + (3*std), color= 'b', ls='--', label='3 std = '+str(mean + (3*std)), lw=1.8)   
+                plt.axvline(x = mean - std, color= 'g', ls='--', label='-1 std = '+str(std), lw=1.8) 
+                plt.axvline(x = mean - (2*std), color= 'y', ls='--', label='-2 std = '+str(mean + (2*std)), lw=1.8) 
+                plt.axvline(x = mean - (3*std), color= 'b', ls='--', label='-3 std = '+str(mean + (3*std)), lw=1.8)  
+
+            #plt.axvline(x = statistics.mode(data[columns]), color= 'g', ls='--', label='mode = '+str(statistics.mode(data[columns])), lw=2.5)      
+            plt.legend(loc='upper right')  
+            plt.title(label = 'Outlier and Boundaries of ' + x + ' with ' + str(method)) 
+            plt.show()    
+            return fig
+    #end function  
+    def show() : 
+        st.pyplot(visualize_data(data, outlier_variab, method, plotkind, filter_value=filter_value, operand=operand))
+
+    
+    show() 
+
+
+@st.experimental_singleton
+def bivar_visual(data , X, y , kind) : 
+  plt.figure(figsize=(10,10))
+  if kind == 'scatter' : 
+    sns.scatterplot(data[X], data[y]) 
+  elif kind == 'line' : 
+    sns.lineplot(data[X], data[y]) 
+  if kind == 'swarm' : 
+    sns.swarmplot(data[X], data[y]) 
+  elif kind == 'regplot' : 
+    sns.regplot(data[X], data[y]) 
+  elif kind =='violin' : 
+    sns.violinplot(data[X], data[y]) 
+  elif kind =='bar' : 
+    sns.barplot(data[X], data[y], palette = 'coolwarm')    
+
     
 ################################################algo#######################################################
 
@@ -240,13 +360,19 @@ if('dataset' in st.session_state) :
 
 
 #exploratory data analysis
+st.header('Click the button below to analyze your data')
 if st.button('Analyze my Data') : 
     eda(st.session_state.dataset)  
 
 if ('dataset' in st.session_state) : 
     dataframe = st.session_state.dataset.copy()
-    spatial_transform(dataframe)    
-    
+    spatial_transform(dataframe)  
+    st.header('Here comes the outlier')     
+    outlier = st.session_state.dataset.copy()
+    check_outlier(outlier)     
+
+
+
 
 
 
